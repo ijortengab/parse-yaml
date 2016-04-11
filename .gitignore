@@ -1,0 +1,9 @@
+*.patch
+test
+test.php
+test.txt
+test.yml
+composer.phar
+composer.lock
+/vendor/
+TODO.md
