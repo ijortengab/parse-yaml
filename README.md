@@ -1,13 +1,13 @@
-Parse INI
+Parse YML
 ==================
 
-ParseINI adalah library PHP untuk mempersing [INI File Format][1]. File dot INI
+ParseYML adalah library PHP untuk mempersing [YAML File Format][1]. File dot YML
 adalah [salah satu file][2] yang digunakan untuk menyimpan configuration. 
 Library ini di-design untuk terintegrasi dengan Class [Configuration Editor][3]. 
-Untuk kebutuhan unparse/dump array kedalam format dot ini, Anda dapat 
+Untuk kebutuhan unparse/dump array kedalam format dot yml, Anda dapat 
 menggunakan Class Configuration Editor.
 
-[1]: https://en.wikipedia.org/wiki/INI_file
+[1]: https://en.wikipedia.org/wiki/YAML
 [2]: https://en.wikipedia.org/wiki/Configuration_file
 [3]: https://github.com/ijortengab/configuration-editor
 
@@ -18,19 +18,15 @@ menggunakan Class Configuration Editor.
 
 ## Comparison
 
-PHP telah memiliki fungsi untuk memparsing file dot ini. Library ParseINI hadir
-untuk melengkapi berbagai kasus yang tidak dapat dihandle oleh fungsi bawaan
-PHP (```parse_ini_file``` dan ```parse_ini_string```). Contohnya pada format
-sbb:
+Library PHP untuk parsing format YAML yang sudah exists adalah [syck], [spyc], 
+dan [symfony/yaml][4]. Perbedaan secara konsep dengan library lainnya ialah 
+perlakuan terhadap *comments* (komentar berupa tulisan yang tidak termasuk dalam
+konfigurasi) yang terdapat pada file YML. ParseYML jika digunakan bersama dengan
+[ConfigurationEditor][3] tidak akan menghilangkan komentar tersebut.
 
-```ini
-key[child][] = value
-key[child][] = other
-```
-
-Format diatas terinspirasi pada file [dot info][4] dari Drupal 7.
-
-[4]: https://www.drupal.org/node/542202
+[syck]: http://pecl.php.net/package/syck
+[spyc]: https://github.com/mustangostang/spyc
+[4]: http://symfony.com/doc/current/components/yaml/introduction.html
 
 ## Repository
 
@@ -40,13 +36,13 @@ ini. Perhatikan _trailing comma_ agar format json anda tidak rusak.
 ```json
 {
     "require": {
-        "ijortengab/parse-ini": "master"
+        "ijortengab/parse-yml": "master"
     },
     "minimum-stability": "dev",
     "repositories": [
         {
             "type": "vcs",
-            "url": "https://github.com/ijortengab/parse-ini"
+            "url": "https://github.com/ijortengab/parse-yml"
         }
     ]
 }
@@ -56,15 +52,30 @@ ini. Perhatikan _trailing comma_ agar format json anda tidak rusak.
 
 ```php
 // Melalui file
-$obj = new ParseINI;
-$obj->filename = 'test.ini';
+$obj = new ParseYML;
+$obj->filename = 'test.yml';
 $obj->parse();
 $result = $obj->data;
 
 // Melalui string
-$string = file_get_contents('test.ini');
-$obj = new ParseINI;
+$string = file_get_contents('test.yml');
+$obj = new ParseYML;
 $obj->raw = $string;
 $obj->parse();
 $result = $obj->data;
+```
+
+## Exception
+Disarankan untuk menghandle RuntimeException saat menjalankan method ::parse() 
+apabila format diragukan kevalidasiannya.
+
+Contoh:
+```
+try {
+    $obj = new ParseYML;
+    $obj->filename = 'test.yml';
+    $obj->parse();
+}
+catch (\RuntimeException $e) {
+}
 ```

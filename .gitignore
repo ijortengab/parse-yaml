@@ -1,8 +1,5 @@
 *.patch
-test
-test.php
-test.txt
-test.yml
+test*
 composer.phar
 composer.lock
 /vendor/
