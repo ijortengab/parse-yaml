@@ -9,6 +9,85 @@ use RuntimeException;
  */
 class ParseYML
 {
+
+    protected $is_scalar;
+
+    protected $is_new_line = true;
+
+    /**
+     */
+    protected $possibility;
+
+    /**
+     *
+     */
+    protected $possibility_next_step;
+
+
+    /**
+     *
+     */
+    public function analyzeCurrentStep($pch, $ch, $nch)
+    {
+        $current_step = $this->analyze_current_step;
+        if (is_string($current_step)) {
+            $_method = 'analyze_step_' . $this->analyze_current_step;
+            $method = $this->camelCaseConvertFromUnderScore($_method);
+            $this->{$method}($pch, $ch, $nch);
+        }
+        elseif (is_array($current_step)) {
+            $found = false;
+            foreach ($current_step as $_method => $action) {
+                $method = $this->camelCaseConvertFromUnderScore($_method);
+                if ($this->{$method}($ch)) {
+                    $found = $_method;
+                    break;
+                }
+            }
+            if ($found === false) {
+                $line_segmen = $this->line_segmen;
+                $debugname = 'line_segmen'; echo "\r\n<pre>" . __FILE__ . ":" . __LINE__ . "\r\n". 'var_dump(' . $debugname . '): '; var_dump($$debugname); echo "</pre>\r\n";
+                $lines = $this->lines;
+                $debugname = 'lines'; echo "\r\n<pre>" . __FILE__ . ":" . __LINE__ . "\r\n". 'var_dump(' . $debugname . '): '; var_dump($$debugname); echo "</pre>\r\n";
+                $data = $this->data;
+                $debugname = 'data'; echo "\r\n<pre>" . __FILE__ . ":" . __LINE__ . "\r\n". 'var_dump(' . $debugname . '): '; var_dump($$debugname); echo "</pre>\r\n";
+
+                throw new RuntimeException;
+            }
+            if (array_key_exists('line_segmen', $current_step[$found])) {
+                $segmen = $current_step[$found]['line_segmen'];
+                $this->line_segmen[$segmen] .= $ch;
+            }
+            if (array_key_exists('analyze_next_step', $current_step[$found])) {
+                $this->analyze_next_step = $current_step[$found]['analyze_next_step'];
+            }
+            if (array_key_exists('move_line_segmen', $current_step[$found])) {
+                list($from, $to) = $current_step[$found]['move_line_segmen'];
+                $this->line_segmen[$to] = $this->line_segmen[$from];
+                $this->line_segmen[$from] = '';
+            }
+        }
+    }
+
+
+
+
+
+
+    /**
+     *
+     */
+    public function checkIndent()
+    {
+
+        $checkIndent = true;
+        $debugname = 'checkIndent'; echo "\r\n<pre>" . __FILE__ . ":" . __LINE__ . "\r\n". 'var_dump(' . $debugname . '): '; var_dump($$debugname); echo "</pre>\r\n";
+
+
+        $this->is_new_line = false;
+    }
+
+
     /**
      * Isi content yang akan diparsing.
      */
@@ -77,31 +156,33 @@ class ParseYML
      * Diawali dengan step 'init'.
      * @see ::parseString().
      */
-    protected $current_analyze_step = 'init';
+    protected $analyze_current_step = 'init';
 
     /**
      * Tahapan membangun parsing berikutnya.
      * Property ini diubah oleh semua method analyze.
      */
-    protected $next_analyze_step;
+    protected $analyze_next_step;
 
     /**
      * Karakter yang dianalisis dari keseluruhan karaakter.
      * Karakter pertama diawali dari angka 0.
      */
-    protected $current_analyze_char = 0;
+    protected $analyze_current_char = 0;
 
     /**
      * Baris saat ini yang sedang dianalisis.
      * Baris pertama diawali dari angka 1.
      */
-    protected $current_analyze_line = 1;
+    protected $analyze_current_line = 1;
 
     /**
      * Kolom dari baris saat ini yang sedang dianalisis.
      * Kolom pertama diawali dari angka 1.
      */
-    protected $current_analyze_column = 1;
+    protected $analyze_current_column = 1;
+
+    protected $analyze_current_indent;
 
     /**
      * Construct.
@@ -118,17 +199,25 @@ class ParseYML
     public function lineSegmenReference()
     {
         return [
-            'key prepend' => '',
+            'key_prepend' => '',
             'key' => '',
-            'key append' => '',
+            'key_append' => '',
             'separator' => '',
             'quote' => '',
-            'value prepend' => '',
+            'value_prepend' => '',
             'value' => '',
-            'value append' => '',
+            'value_append' => '',
             'comment' => '',
             'eol' => '',
         ];
+    }
+
+    /**
+     *
+     */
+    public function isAlphaNumeric($ch)
+    {
+        return ctype_alnum($ch);
     }
 
     /**
@@ -160,7 +249,7 @@ class ParseYML
      */
     public function isSeparator($ch)
     {
-        return in_array($ch, [':']);
+        return ($ch === ':');
     }
 
     /**
@@ -168,7 +257,7 @@ class ParseYML
      */
     public function isCommentSign($ch)
     {
-        return in_array($ch, ['#']);
+        return ($ch === '#');
     }
 
     /**
@@ -192,49 +281,65 @@ class ParseYML
         // Prepare.
         $this->line_segmen = $this->lineSegmenReference();
         do {
-            $x = $this->current_analyze_char;
+            $x = $this->analyze_current_char;
             $ch = isset($string[$x]) ? $string[$x] : false;
             $nch = isset($string[$x+1]) ? $string[$x+1] : false;
             $pch = isset($string[$x-1]) ? $string[$x-1] : false;
             if ($ch == "\r" && $nch == "\n") {
                 $ch = "\r\n";
                 $nch = isset($string[$x+2]) ? $string[$x+2] : false;
-                $this->current_analyze_char++;
+                $this->analyze_current_char++;
             }
+            // if ($this->is_new_line && $this->analyze_current_step != 'build_value') {
+                // $this->checkIndent();
+            // }
 
+            $analyze_current_step = $this->analyze_current_step;
+            $debugname = 'analyze_current_step'; echo "\r\n<pre>" . __FILE__ . ":" . __LINE__ . "\r\n". 'var_dump(' . $debugname . '): '; var_dump($$debugname); echo "</pre>\r\n";
             $debugname = 'ch'; echo "\r\n<pre>" . __FILE__ . ":" . __LINE__ . "\r\n". 'var_dump(' . $debugname . '): '; var_dump($$debugname); echo "</pre>\r\n";
 
             // Let's Analyze.
-            $_method = 'analyze_step_' . $this->current_analyze_step;
-            $method = $this->camelCaseConvertFromUnderScore($_method);
-            $this->{$method}($pch, $ch, $nch);
+            $this->analyzeCurrentStep($pch, $ch, $nch);
 
-            // Finishing for the end of file.
-            if ($nch === false) {
-                $current_analyze_step = $this->current_analyze_step;
-                if ($this->current_analyze_step === 'build_value') {
+            // Finishing for the end of file
+            // if file not ending with EOL.
+            if ($this->isBreak($ch) === false &&  $nch === false) {
+                $analyze_current_step = $this->analyze_current_step;
+                if ($this->analyze_current_step === 'build_value') {
+                    $segmen = $this->line_segmen;
+                    $debugname = 'segmen'; echo "\r\n<pre>" . __FILE__ . ":" . __LINE__ . "\r\n". 'var_dump(' . $debugname . '): '; var_dump($$debugname); echo "</pre>\r\n";
                     $this->analyzeFinish();
                 }
-                $debugname = 'current_analyze_step'; echo "\r\n<pre>" . __FILE__ . ":" . __LINE__ . "\r\n". 'var_dump(' . $debugname . '): '; var_dump($$debugname); echo "</pre>\r\n";
-
-                $this->lines[$this->current_analyze_line] = $this->line_segmen;
+                // $debugname = 'analyze_current_step'; echo "\r\n<pre>" . __FILE__ . ":" . __LINE__ . "\r\n". 'var_dump(' . $debugname . '): '; var_dump($$debugname); echo "</pre>\r\n";
+                $this->lines[$this->analyze_current_line] = $this->line_segmen;
                 $this->line_segmen = null;
             }
             else {
                 // Prepare for the next character analyze.
-                $this->current_analyze_char++;
-                $this->current_analyze_column++;
-                if (null !== $this->next_analyze_step) {
-                    $this->current_analyze_step = $this->next_analyze_step;
-                    $this->next_analyze_step = null;
+                $this->analyze_current_char++;
+                $this->analyze_current_column++;
+                if (null !== $this->analyze_next_step) {
+                    $this->analyze_current_step = $this->analyze_next_step;
+                    $this->analyze_next_step = null;
+                }
+                if (null !== $this->possibility_next_step) {
+                    $this->possibility = $this->possibility_next_step;
+                    $this->possibility_next_step = null;
                 }
                 if ($this->isBreak($ch)) {
-                    $this->lines[$this->current_analyze_line] = $this->line_segmen;
-                    $this->line_segmen = $this->lineSegmenReference();
-                    $this->current_analyze_line++;
-                    $this->current_analyze_column = 1;
+                    if ($this->analyze_current_step != 'build_value') {
+                        $this->lines[$this->analyze_current_line] = $this->line_segmen;
+                        $this->line_segmen = $this->lineSegmenReference();
+                        $this->is_new_line = true;
+                    }
+                    $this->analyze_current_line++;
+                    $this->analyze_current_column = 1;
                 }
             }
+
+            // if ($x == 21) {
+                // break;
+            // }
         } while($nch !== false);
 
         $line_segmen = $this->line_segmen;
@@ -249,21 +354,24 @@ class ParseYML
 
     }
 
-
     /**
      *
      */
     public function analyzeStepInit($pch, $ch, $nch)
     {
-        if (ctype_alnum($ch)) {
+        if ($this->isAlphaNumeric($ch)) {
+            // Jika karakter sebelumnya adalah whitespace, maka error
+            if ($this->isWhiteSpace($pch)) {
+                throw new RuntimeException;
+            }
             $this->line_segmen['key'] .= $ch;
-            $this->next_analyze_step = 'build_key';
+            $this->analyze_next_step = 'build_key';
         }
         elseif ($this->isBreak($ch)) {
             $this->line_segmen['eol'] .= $ch;
         }
         elseif ($this->isWhiteSpace($ch)) {
-            throw new RuntimeException;
+            // throw new RuntimeException;
         }
         elseif ($this->isQuote($ch)) {
         }
@@ -271,29 +379,49 @@ class ParseYML
         }
         elseif ($this->isCommentSign($ch)) {
         }
+        elseif ($ch == '-' && $this->isWhiteSpace($nch)) {
+            $this->is_scalar = true;
+            $this->line_segmen['value_prepend'] .= $ch;
+            $this->analyze_next_step = [
+                'is_quote' => [
+                    'line_segmen' => 'quote',
+                    'analyze_next_step' => 'build_value',
+                ],
+                'is_alpha_numeric' => [
+                    'line_segmen' => 'key',
+                    'analyze_next_step' => 'build_key',
+                    'move_line_segmen' => ['value_prepend', 'key_prepend'],
+                ],
+                'is_white_space' => [
+                    'line_segmen' => 'value_prepend',
+                    // 'analyze_next_step' => 'build_value_prepend',
+                ],
+            ];
+        }
         else {
             $this->line_segmen['key'] .= $ch;
-            $this->next_analyze_step = 'build_key';
+            $this->analyze_next_step = 'build_key';
         }
     }
-
 
     /**
      *
      */
     public function analyzeStepBuildKey($pch, $ch, $nch)
     {
-        if (ctype_alnum($ch)) {
+        if ($this->isAlphaNumeric($ch)) {
             $this->line_segmen['key'] .= $ch;
-            $this->next_analyze_step = 'build_key';
+            $this->analyze_next_step = 'build_key';
         }
         elseif ($this->isBreak($ch)) {
         }
         elseif ($this->isWhiteSpace($ch)) {
-            $this->line_segmen['key append'] .= $ch;
-            $this->next_analyze_step = 'build_key_append';
+            $this->line_segmen['key_append'] .= $ch;
+            $this->analyze_next_step = 'build_key_append';
         }
         elseif ($this->isQuote($ch)) {
+            // $this->line_segmen['quote'] .= $ch;
+            // $this->analyze_next_step = 'build_value_prepend';
         }
         elseif ($this->isSeparator($ch)) {
             $this->line_segmen['separator'] .= $ch;
@@ -301,7 +429,7 @@ class ParseYML
             if (!ctype_space($nch)) {
                 throw new RuntimeException;
             }
-            $this->next_analyze_step = 'build_value_prepend';
+            $this->analyze_next_step = 'build_value_prepend';
         }
         elseif ($this->isCommentSign($ch)) {
         }
@@ -314,14 +442,14 @@ class ParseYML
      */
     public function analyzeStepBuildKeyAppend($pch, $ch, $nch)
     {
-        if (ctype_alnum($ch)) {
+        if ($this->isAlphaNumeric($ch)) {
             $this->line_segmen['value'] .= $ch;
-            $this->next_analyze_step = 'build_value';
+            $this->analyze_next_step = 'build_value';
         }
         elseif ($this->isBreak($ch)) {
         }
         elseif ($this->isWhiteSpace($ch)) {
-            $this->line_segmen['key append'] .= $ch;
+            $this->line_segmen['key_append'] .= $ch;
         }
         elseif ($this->isQuote($ch)) {
         }
@@ -331,7 +459,7 @@ class ParseYML
             if (!ctype_space($nch)) {
                 throw new RuntimeException;
             }
-            $this->next_analyze_step = 'build_value_prepend';
+            $this->analyze_next_step = 'build_value_prepend';
         }
         elseif ($this->isCommentSign($ch)) {
         }
@@ -344,18 +472,18 @@ class ParseYML
      */
     public function analyzeStepBuildValuePrepend($pch, $ch, $nch)
     {
-        if (ctype_alnum($ch)) {
+        if ($this->isAlphaNumeric($ch)) {
             $this->line_segmen['value'] .= $ch;
-            $this->next_analyze_step = 'build_value';
+            $this->analyze_next_step = 'build_value';
         }
         elseif ($this->isBreak($ch)) {
         }
         elseif ($this->isWhiteSpace($ch)) {
-            $this->line_segmen['value prepend'] .= $ch;
+            $this->line_segmen['value_prepend'] .= $ch;
         }
         elseif ($this->isQuote($ch)) {
             $this->line_segmen['quote'] .= $ch;
-            $this->next_analyze_step = 'build_value';
+            $this->analyze_next_step = 'build_value';
         }
         elseif ($this->isSeparator($ch)) {
         }
@@ -370,30 +498,39 @@ class ParseYML
      */
     public function analyzeStepBuildValue($pch, $ch, $nch)
     {
-        if (ctype_alnum($ch)) {
+        if ($this->isAlphaNumeric($ch)) {
             $this->line_segmen['value'] .= $ch;
         }
         elseif ($this->isBreak($ch)) {
-            $this->line_segmen['eol'] .= $ch;
-            $this->analyzeFinish();
-            $this->next_analyze_step = 'init';
+            if (!empty($this->line_segmen['quote'])) {
+                $this->line_segmen['value'] .= $ch;
+            }
+            else {
+                $this->line_segmen['eol'] .= $ch;
+                $this->analyzeFinish();
+                $this->analyze_next_step = 'init';
+            }
+
+            // $a = $this->line_segmen;
+            // $debugname = 'a'; echo "\r\n<pre>" . __FILE__ . ":" . __LINE__ . "\r\n". 'var_dump(' . $debugname . '): '; var_dump($$debugname); echo "</pre>\r\n";
+            // die;
         }
         elseif ($this->isWhiteSpace($ch)) {
             $this->line_segmen['value'] .= $ch;
         }
         elseif ($this->isQuote($ch)) {
             if ($ch == '"' && $this->line_segmen['quote'] == '"') {
-                $this->next_analyze_step = 'build_value_append';
+                $this->analyze_next_step = 'build_value_append';
             }
             elseif ($ch == "'" && $this->line_segmen['quote'] == "'") {
                 if ($nch == "'") {
                     // Kasus:
                     // key: 'value''value'
                     $this->line_segmen['value'] .= $ch;
-                    $this->current_analyze_char++;
+                    $this->analyze_current_char++;
                 }
                 else {
-                    $this->next_analyze_step = 'build_value_append';
+                    $this->analyze_next_step = 'build_value_append';
                 }
                 // Todo: saat unparse, maka jika quote menggunakan
                 // singlequote, maka jika value terdapat singlequote
@@ -420,7 +557,7 @@ class ParseYML
                 // Kasus:
                 // key: "value\"value\"value"
                 $this->line_segmen['value'] .= '"';
-                $this->current_analyze_char++;
+                $this->analyze_current_char++;
             }
             else {
                 $this->line_segmen['value'] .= $ch;
@@ -436,15 +573,15 @@ class ParseYML
      */
     public function analyzeStepBuildValueAppend($pch, $ch, $nch)
     {
-        if (ctype_alnum($ch)) {
+        if ($this->isAlphaNumeric($ch)) {
         }
         elseif ($this->isBreak($ch)) {
             $this->line_segmen['eol'] .= $ch;
             $this->analyzeFinish();
-            $this->next_analyze_step = 'init';
+            $this->analyze_next_step = 'init';
         }
         elseif ($this->isWhiteSpace($ch)) {
-            $this->line_segmen['value append'] .= $ch;
+            $this->line_segmen['value_append'] .= $ch;
         }
         elseif ($this->isQuote($ch)) {
         }
@@ -461,7 +598,7 @@ class ParseYML
      */
     public function analyzeStepTemplate($pch, $ch, $nch)
     {
-        if (ctype_alnum($ch)) {
+        if ($this->isAlphaNumeric($ch)) {
         }
         elseif ($this->isBreak($ch)) {
         }
@@ -482,6 +619,7 @@ class ParseYML
      */
     public function analyzeFinish()
     {
+        // Perbaiki value.
         $value = $this->line_segmen['value'];
         // Jika tidak ada quote, maka
         if (empty($this->line_segmen['quote'])) {
@@ -489,7 +627,25 @@ class ParseYML
                 $value = (int) $value;
             }
         }
-        $this->data[$this->line_segmen['key']] = $value;
+        elseif ($this->line_segmen['quote'] == '"') {
+            // Todo. Jika unparse, maka kembalikan ke /n
+            $from[] = '\r'; $to[] = "\r";
+            $from[] = '\n'; $to[] = "\n";
+            $value = str_replace($from, $to, $value);
+        }
+
+        // Perbaiki key.
+        $key = $this->line_segmen['key'];
+        // $debugname = 'key'; echo "\r\n<pre>" . __FILE__ . ":" . __LINE__ . "\r\n". 'var_dump(' . $debugname . '): '; var_dump($$debugname); echo "</pre>\r\n";
+        if (empty($key)) {
+            $this->data[] = $value;
+        }
+        else {
+            $this->data[$key] = $value;
+        }
+        // $data = $this->data;
+        // $db = debug_backtrace();
+        // $debugname = 'db'; echo "\r\n<pre>" . __FILE__ . ":" . __LINE__ . "\r\n". 'var_dump(' . $debugname . '): '; var_dump($$debugname); echo "</pre>\r\n";
 
     }
 
