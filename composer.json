@@ -11,13 +11,21 @@
         }
     ],
     "require": {
-        "php": ">=5.4.0"
+        "php": ">=5.4.0",
+        "ijortengab/tools": "master"
     },
     "require-dev": {
         "symfony/yaml": "^3.0",
         "mustangostang/spyc": "^0.5.1"
     },
+    "minimum-stability": "dev",
     "autoload": {
         "psr-4": {"IjorTengab\\": "src/"}
-    }
+    },
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "https://github.com/ijortengab/tools"            
+        }
+    ]
 }
