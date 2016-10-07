@@ -14,7 +14,7 @@ class ParseYML extends AbstractAnalyzeCharacter
     protected $current_step = 'init';
     protected $next_step;
     protected $has_parsed = false;
-    protected $data = [];
+    protected $data;
     protected $segmen = [];
     protected $keys = [];
     protected $keys_temporary = [];
