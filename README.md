@@ -83,3 +83,22 @@ catch (\RuntimeException $e) {
 
 ## Test
 
+## Perbedaan hasil dengan Symfony/Yaml
+
+Berikut ini ada perbedaan hasil antara IjorTengab/ParseYML dengan Symfony/Yaml
+
+symfony/yaml berhasil memparsing string yml sbb:
+```
+###
+###
+##
+"asldk: jfas"
+```
+tapi Symfony throw error pada string yml sbb:
+```
+###
+###
+##
+"asldk: jfas"[space][space][space]
+```
+Sementara, untuk ParseYML kedua format diatas resolve.

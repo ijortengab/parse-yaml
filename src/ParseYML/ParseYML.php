@@ -15,7 +15,7 @@ class ParseYML extends AbstractAnalyzeCharacter
     protected $next_step;
     protected $has_parsed = false;
     protected $data = [];
-    protected $lines = [];
+    protected $segmen = [];
     protected $keys = [];
     protected $keys_temporary = [];
     protected $indents_temporary = [];
@@ -24,7 +24,7 @@ class ParseYML extends AbstractAnalyzeCharacter
     protected $quote_is_single = false;
     protected $quote_is_double = false;
     /**
-     * Kondisi looping saat ini.
+     * Kondisi dimensi saat ini.
      */
     protected $current_array_dimension = 0;
     protected $current_array_dimension_is_indexed = false;
@@ -45,7 +45,7 @@ class ParseYML extends AbstractAnalyzeCharacter
     {
         if (false === $this->has_parsed) {
             $this->has_parsed = true;
-            return $this->analyze();
+            return $this->looping();
         }
     }
 
@@ -62,11 +62,11 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function analyzeCurrentLine()
     {
-        $this->debug(__METHOD__, '__METHOD__');
-        $this->debug($this->current_array_dimension, '$this->current_array_dimension', 1);
-        $this->debug($this->current_array_dimension_is_indexed, '$this->current_array_dimension_is_indexed', 1);
-        $this->debug($this->current_array_dimension_is_associative, '$this->current_array_dimension_is_associative', 1);
-        $this->debug($this->indents_temporary, '$this->indents_temporary', 1);
+        // $this->debug(__METHOD__, '__METHOD__');
+        // $this->debug($this->current_array_dimension, '$this->current_array_dimension', 1);
+        // $this->debug($this->current_array_dimension_is_indexed, '$this->current_array_dimension_is_indexed', 1);
+        // $this->debug($this->current_array_dimension_is_associative, '$this->current_array_dimension_is_associative', 1);
+        // $this->debug($this->indents_temporary, '$this->indents_temporary', 1);
         if ($this->current_step !== 'init') {
             return;
         }
@@ -82,21 +82,30 @@ class ParseYML extends AbstractAnalyzeCharacter
         }
         // Jika isinya cuma comment.
         if (preg_match('/^(?<leading_space>[\s]*)(?<comment>#.*)/', $current_line_string, $match)) {
-            $this->debug($match, '$match', 2);
+            // $this->debug($match, '$match', 2);
             return $this->analyzeLineComment($match);
         }
         // Jika line merupakan sequence of scalar (array indexed).
         if (preg_match('/^(?<leading_space>[\s]*)(?<sequence_sign>-[\s])(?<other>.*)/', $current_line_string, $match)) {
-            $this->debug($match, '$match', 2);
+            // $this->debug($match, '$match', 2);
             return $this->analyzeLineSequenceOfScalar($match);
         }
         // Jika line merupakan mapping of scalar (array associative).
         if (preg_match('/^(?<leading_space>[\s]*)(?<key>[^\s].*):/', $current_line_string, $match)) {
-            $this->debug($match, '$match', 2);
+            // $this->debug($match, '$match', 2);
             return $this->analyzeLineMappingOfScalar($match);
         }
+        // Untuk kasus
+        // ```yml
+        // # Bla-bla
+        // cinta
+        // ```
+        // maka solusinya adalah:
+        if ($this->current_array_dimension === 0) {
+            return;
+        }
         // Gak ada yang cocok? Lempar.
-        throw new RuntimeException('Unable to parse the line. Line: ' . $this->current_line . ', column: ' . $this->current_column . ', string: "' . $this->current_line_string . '".');
+        return $this->error('Unable to parse the line.');
     }
 
     /**
@@ -157,8 +166,8 @@ class ParseYML extends AbstractAnalyzeCharacter
                 if ($this->current_array_dimension_is_associative) {
                     $prev_line = $this->current_line - 1;
                     $dimension = $this->current_array_dimension;
-                    if (array_key_exists('value', $this->lines[$prev_line][$dimension]['segmen'])) {
-                        throw new RuntimeException('Rule5: You cannot define a sequence item when in a mapping. Line: ' . $this->current_line . ', column: ' . $this->current_column . ', string: "' . $this->current_line_string . '".');
+                    if (array_key_exists('value', $this->segmen[$prev_line][$dimension]['segmen'])) {
+                        return $this->error('Currently is mapping.');
                     }
                 }
                 // Pada kasus
@@ -197,8 +206,9 @@ class ParseYML extends AbstractAnalyzeCharacter
     /**
      *
      */
-    protected function beforeAnalyze()
+    protected function beforeLooping()
     {
+        // $this->debug(__METHOD__, '__METHOD__');
         if (false === strpos($this->raw, "\r") && false === strpos($this->raw, "\n")) {
             $this->current_step = 'build_value_prepend';
         }
@@ -207,18 +217,58 @@ class ParseYML extends AbstractAnalyzeCharacter
     /**
      *
      */
+    protected function afterLooping()
+    {
+        // $this->debug(__METHOD__, '__METHOD__');
+        // $this->debug($this->segmen, '$this->segmen');
+        $this->buildData();
+    }
+
+    /**
+     *
+     */
+    protected function beforeAnalyze()
+    {
+
+
+    }
+    /**
+     *
+     */
     protected function afterAnalyze()
     {
-        $this->debug(__METHOD__, '__METHOD__');
-        $this->debug($this->lines, '$this->lines');
-        // if (0 === $dimension) {
-                    // $this->data = $value;
-                    // break 2;
-                // }
-        
-        
-        
-        $this->buildData();
+        if ($this->is_last) {
+            switch ($this->current_step) {
+                case 'build_key':
+                    if ($this->is_ongoing_wrapped_by_quote) {
+                        $this->error('Malformat.');
+                    }
+                    else {
+                        $this->cleaningTrailingWhiteSpace('key');
+                    }
+                    break;
+
+                case 'build_value':
+                    // Contoh, ada tiga spasi di akhir:
+                    // ```
+                    // aku: sayang[\r][\n]
+                    // kamu: cinta[space][space][space]
+                    // ```
+
+                    if ($this->is_ongoing_wrapped_by_quote) {
+                        $this->error('Malformat.');
+                    }
+                    else {
+                        $this->cleaningTrailingWhiteSpace('value');
+                    }
+                    break;
+
+                default:
+                    // Do something.
+                    break;
+            }
+        }
+
     }
 
     /**
@@ -254,7 +304,7 @@ class ParseYML extends AbstractAnalyzeCharacter
                 // dd: xxx
                 // ```
                 if ($this->current_array_dimension_is_indexed) {
-                    throw new RuntimeException('Rule6: You cannot define a mapping item when in a sequence. Line: ' . $this->current_line . ', column: ' . $this->current_column . ', string: "' . $this->current_line_string . '".');
+                    return $this->error('Currently is sequence.');
                 }
                 else {
                     $this->setCurrentArrayAs('associative');
@@ -277,7 +327,7 @@ class ParseYML extends AbstractAnalyzeCharacter
     protected function manipulateCurrentCharacter()
     {
         parent::manipulateCurrentCharacter();
-        $this->debug(__METHOD__, '__METHOD__');
+        // $this->debug(__METHOD__, '__METHOD__');
         $ch = $this->current_character_string;
         $nch = $this->next_character_string;
         // Mendefinisikan character quote yang di-escape agar tidak bentrok
@@ -290,7 +340,7 @@ class ParseYML extends AbstractAnalyzeCharacter
                 // 'a\'a': bb
                 // ```
                 if ($quote == "'" && $nch == "'") {
-                    throw new RuntimeException('Unable to parse the line. Line: ' . $this->current_line . ', column: ' . $this->current_column . ', string: "' . $this->current_line_string . '".');
+                    return $this->error('Unable to parse the line.');
                 }
                 $x = $this->current_character;
                 $ch = '\\' . $nch;
@@ -301,9 +351,9 @@ class ParseYML extends AbstractAnalyzeCharacter
             }
         }
         // Debug.
-        $this->debug($this->current_character_string, '$this->current_character_string', 1);
-        $this->debug($this->next_character_string, '$this->next_character_string', 1);
-        $this->debug($this->prev_character_string, '$this->prev_character_string', 1);
+        // $this->debug($this->current_character_string, '$this->current_character_string', 1);
+        // $this->debug($this->next_character_string, '$this->next_character_string', 1);
+        // $this->debug($this->prev_character_string, '$this->prev_character_string', 1);
     }
 
     /**
@@ -312,7 +362,7 @@ class ParseYML extends AbstractAnalyzeCharacter
     protected function assignCurrentCharacter()
     {
         parent::assignCurrentCharacter();
-        $this->debug(__METHOD__, '__METHOD__');
+        // $this->debug(__METHOD__, '__METHOD__');
         $ch = $this->current_character_string;
         if (ctype_alnum($ch)) {
             $this->is_alphanumeric = true;
@@ -336,14 +386,14 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function analyzeCurrentCharacter()
     {
-        $this->debug(__METHOD__, '__METHOD__');
-        $this->debug($this->is_last, '$this->is_last', 1);
-        $this->debug($this->is_alphanumeric, '$this->is_alphanumeric', 1);
-        $this->debug($this->is_break, '$this->is_break', 1);
-        $this->debug($this->is_space, '$this->is_space', 1);
-        $this->debug($this->is_quote, '$this->is_quote', 1);
-        $this->debug($this->is_separator, '$this->is_separator', 1);
-        $this->debug($this->is_commentsign, '$this->is_commentsign', 1);
+        // $this->debug(__METHOD__, '__METHOD__');
+        // $this->debug($this->is_last, '$this->is_last', 1);
+        // $this->debug($this->is_alphanumeric, '$this->is_alphanumeric', 1);
+        // $this->debug($this->is_break, '$this->is_break', 1);
+        // $this->debug($this->is_space, '$this->is_space', 1);
+        // $this->debug($this->is_quote, '$this->is_quote', 1);
+        // $this->debug($this->is_separator, '$this->is_separator', 1);
+        // $this->debug($this->is_commentsign, '$this->is_commentsign', 1);
         $this->runStep();
     }
 
@@ -353,10 +403,10 @@ class ParseYML extends AbstractAnalyzeCharacter
     protected function prepareNextLoop()
     {
         parent::prepareNextLoop();
-        $this->debug(__METHOD__, '__METHOD__');
-        $this->debug($this->next_step, '$this->next_step');
+        // $this->debug(__METHOD__, '__METHOD__');
+        // $this->debug($this->next_step, '$this->next_step');
         if ($this->next_step !== null) {
-            $this->debug($this->next_step, '$this->next_step', 1);
+            // $this->debug($this->next_step, '$this->next_step', 1);
             $this->current_step = $this->next_step;
             $this->next_step = null;
         }
@@ -380,8 +430,8 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function runStep()
     {
-        $this->debug(__METHOD__, '__METHOD__');
-        $this->debug($this->current_step, '$this->current_step', 1);
+        // $this->debug(__METHOD__, '__METHOD__');
+        // $this->debug($this->current_step, '$this->current_step', 1);
         $current_step = $this->current_step;
         $_method = 'analyze_step_' . $this->current_step;
         $method = CamelCase::convertFromUnderScore($_method);
@@ -394,13 +444,13 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function setCharacter($key, $value)
     {
-        $this->debug(__METHOD__, '__METHOD__');
-        $this->debug($key, '$key', 1);
-        $this->debug($value, '$value', 1);
-        if (!isset($this->lines[$this->current_line][$this->current_array_dimension]['segmen'][$key])) {
-            $this->lines[$this->current_line][$this->current_array_dimension]['segmen'][$key] = '';
+        // $this->debug(__METHOD__, '__METHOD__');
+        // $this->debug($key, '$key', 1);
+        // $this->debug($value, '$value', 1);
+        if (!isset($this->segmen[$this->current_line][$this->current_array_dimension]['segmen'][$key])) {
+            $this->segmen[$this->current_line][$this->current_array_dimension]['segmen'][$key] = '';
         }
-        $this->lines[$this->current_line][$this->current_array_dimension]['segmen'][$key] .= $value;
+        $this->segmen[$this->current_line][$this->current_array_dimension]['segmen'][$key] .= $value;
     }
 
     /**
@@ -408,7 +458,7 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function setCurrentCharacterAs($key)
     {
-        $this->debug(__METHOD__, '__METHOD__');
+        // $this->debug(__METHOD__, '__METHOD__');
         return $this->setCharacter($key, $this->current_character_string);
     }
 
@@ -417,10 +467,10 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function getCharacter($key)
     {
-        $this->debug(__METHOD__, '__METHOD__');
-        $this->debug($key, '$key', 1);
-        if (isset($this->lines[$this->current_line][$this->current_array_dimension]['segmen'][$key])) {
-            return $this->lines[$this->current_line][$this->current_array_dimension]['segmen'][$key];
+        // $this->debug(__METHOD__, '__METHOD__');
+        // $this->debug($key, '$key', 1);
+        if (isset($this->segmen[$this->current_line][$this->current_array_dimension]['segmen'][$key])) {
+            return $this->segmen[$this->current_line][$this->current_array_dimension]['segmen'][$key];
         }
     }
 
@@ -429,9 +479,9 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function delCharacter($key)
     {
-        $this->debug(__METHOD__, '__METHOD__');
-        $this->debug($key, '$key', 1);
-        unset($this->lines[$this->current_line][$this->current_array_dimension]['segmen'][$key]);
+        // $this->debug(__METHOD__, '__METHOD__');
+        // $this->debug($key, '$key', 1);
+        unset($this->segmen[$this->current_line][$this->current_array_dimension]['segmen'][$key]);
     }
 
     /**
@@ -439,9 +489,21 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function analyzeStepInit()
     {
-        $this->debug(__METHOD__, '__METHOD__');
-        if ($this->is_break) {
+        // $this->debug(__METHOD__, '__METHOD__');
+        if ($this->is_alphanumeric) {
+            $this->setCurrentCharacterAs('value');
+            $this->next_step = 'build_value';
+        }
+        elseif ($this->is_quote) {
+            $this->setCurrentCharacterAs('quote_value');
+            $this->next_step = 'build_value';
+            $this->toggleQuote();
+        }
+        elseif ($this->is_break) {
             $this->setCurrentCharacterAs('eol');
+        }
+        elseif ($this->is_space) {
+            $this->error('Cannot leading space.');
         }
     }
 
@@ -450,7 +512,7 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function analyzeStepBuildKeyPrepend()
     {
-        $this->debug(__METHOD__, '__METHOD__');
+        // $this->debug(__METHOD__, '__METHOD__');
         if ($this->is_alphanumeric) {
             $this->setCurrentCharacterAs('key');
             $this->next_step = 'build_key';
@@ -458,7 +520,7 @@ class ParseYML extends AbstractAnalyzeCharacter
         elseif ($this->is_quote) {
             $this->setCurrentCharacterAs('quote_key');
             $this->next_step = 'build_key';
-            $this->toggleQuote(true);
+            $this->toggleQuote();
         }
         else {
             $this->error('Unexpected characters.');
@@ -470,7 +532,7 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function analyzeStepBuildKey()
     {
-        $this->debug(__METHOD__, '__METHOD__');
+        // $this->debug(__METHOD__, '__METHOD__');
         $default = false;
         if ($this->is_alphanumeric) {
             $default = true;
@@ -479,10 +541,10 @@ class ParseYML extends AbstractAnalyzeCharacter
             if ($this->is_ongoing_wrapped_by_quote) {
                 $default = true;
             }
-            else {                
+            else {
                 // Rule1: Karakter sesudah separator harus whitespace.
                 if (!ctype_space($this->next_character_string)) {
-                    throw new RuntimeException('Rule1: Karakter sesudah separator harus whitespace. Line: ' . $this->current_line . ', column: ' . $this->current_column . ', string: "' . $this->current_line_string . '".');
+                    return $this->error('Unexpected colon inside key.');
                 }
                 $this->setCurrentCharacterAs('separator');
                 $this->next_step = 'build_value_prepend';
@@ -490,20 +552,14 @@ class ParseYML extends AbstractAnalyzeCharacter
         }
         elseif ($this->is_quote) {
             if ($this->is_ongoing_wrapped_by_quote) {
-               $quote = $this->quote_is_single ? "'" : '"'; 
-               // $debugname = 'default'; echo "\r\n<pre>" . __FILE__ . ":" . __LINE__ . "\r\n". 'var_dump(' . $debugname . '): '; var_dump($$debugname); echo "</pre>\r\n";
-               
-               
-               
+               $quote = $this->quote_is_single ? "'" : '"';
                if ($quote === $this->current_character_string) {
                    $this->next_step = 'build_key_append';
-                    $this->toggleQuote(false);
+                    $this->toggleQuote();
                }
-               else {                   
+               else {
                     $default = true;
                }
-               // $debugname = 'default'; echo "\r\n<pre>" . __FILE__ . ":" . __LINE__ . "\r\n". 'var_dump(' . $debugname . '): '; var_dump($$debugname); echo "</pre>\r\n";
-               // die('xx' . $quote);
             }
             else {
                 $default = true;
@@ -515,16 +571,6 @@ class ParseYML extends AbstractAnalyzeCharacter
         if ($default) {
             $this->setCurrentCharacterAs('key');
         }
-        // Last 
-        if ($this->is_last) {
-            if ($this->is_ongoing_wrapped_by_quote) {
-                $this->error('Malformat.');
-            }
-            else {
-                
-                $this->setCurrentCharacterAs('key');
-            }
-        }
     }
 
     /**
@@ -532,11 +578,11 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function analyzeStepBuildKeyAppend()
     {
-        $this->debug(__METHOD__, '__METHOD__');
+        // $this->debug(__METHOD__, '__METHOD__');
         if ($this->is_separator) {
             // Rule1: Karakter sesudah separator harus whitespace.
             if (!ctype_space($this->next_character_string)) {
-                throw new RuntimeException('Rule1: Karakter sesudah separator harus whitespace. Line: ' . $this->current_line . ', column: ' . $this->current_column . ', string: "' . $this->current_line_string . '".');
+                return $this->error('Malformat colon.');
             }
             $this->setCurrentCharacterAs('separator');
             $this->next_step = 'build_value_prepend';
@@ -545,17 +591,7 @@ class ParseYML extends AbstractAnalyzeCharacter
             $this->setCurrentCharacterAs('key_append');
         }
         else {
-            $this->error('Unexpected characters.');
-        }
-        if ($this->is_last) {
-            die('kjsahdkfasljflas');
-            
-            if ($this->is_ongoing_wrapped_by_quote) {
-                $this->error('Malformat.');
-            }
-            else {
-                $this->setCurrentCharacterAs('key');
-            }
+            return $this->error('Unexpected characters.');
         }
     }
 
@@ -564,14 +600,14 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function analyzeStepBuildValuePrepend()
     {
-        $this->debug(__METHOD__, '__METHOD__');
+        // $this->debug(__METHOD__, '__METHOD__');
         if ($this->is_space) {
             $this->setCurrentCharacterAs('value_prepend');
         }
         elseif ($this->is_quote) {
             $this->setCurrentCharacterAs('quote_value');
             $this->next_step = 'build_value';
-            $this->toggleQuote(true);
+            $this->toggleQuote();
         }
         elseif ($this->is_commentsign) {
             $this->setCurrentCharacterAs('comment');
@@ -587,7 +623,7 @@ class ParseYML extends AbstractAnalyzeCharacter
         else {
             $this->setCurrentCharacterAs('value');
             $this->next_step = 'build_value';
-        }        
+        }
     }
 
     /**
@@ -595,7 +631,7 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function analyzeStepBuildValue()
     {
-        $this->debug(__METHOD__, '__METHOD__');
+        // $this->debug(__METHOD__, '__METHOD__');
         $default = false;
         if ($this->is_alphanumeric) {
             $default = true;
@@ -615,16 +651,23 @@ class ParseYML extends AbstractAnalyzeCharacter
                 $default = true;
             }
             else {
+                $this->cleaningTrailingWhiteSpace('value');
                 $this->setCurrentCharacterAs('comment');
                 $this->next_step = 'build_comment';
             }
         }
         elseif ($this->is_quote && $this->is_ongoing_wrapped_by_quote) {
             $quote = $this->quote_is_single ? "'" : '"';
-            $this->debug($quote, '$quote', 1);
+            // $this->debug($quote, '$quote', 1);
             if ($quote === $this->current_character_string) {
+                // Pada kasus sepert ini:
+                // ```
+                // description: ''
+                // ```
+                // Maka solusinya adalah tambah value kosong.
+                $this->setCharacter('value', '');
                 $this->next_step = 'build_value_append';
-                $this->toggleQuote(false);
+                $this->toggleQuote();
             }
             else {
                 $default = true;
@@ -660,14 +703,6 @@ class ParseYML extends AbstractAnalyzeCharacter
         if ($default) {
             $this->setCurrentCharacterAs('value');
         }
-        // Contoh, ada tiga spasi di akhir:
-        // ```
-        // aku: sayang[\r][\n]
-        // kamu: cinta[space][space][space]
-        // ```
-        if ($this->is_last) {
-            $this->cleaningTrailingWhiteSpace('value');
-        }
     }
 
     /**
@@ -675,7 +710,7 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function analyzeStepBuildValueAppend()
     {
-        $this->debug(__METHOD__, '__METHOD__');
+        // $this->debug(__METHOD__, '__METHOD__');
         if ($this->is_break) {
             $this->setCurrentCharacterAs('eol');
             $this->next_step = 'init';
@@ -707,7 +742,7 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function analyzeStepBuildComment()
     {
-        $this->debug(__METHOD__, '__METHOD__');
+        // $this->debug(__METHOD__, '__METHOD__');
         $default = false;
         if ($this->is_break) {
             $this->setCurrentCharacterAs('eol');
@@ -726,7 +761,7 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function setCurrentArrayAs($type)
     {
-        $this->debug(__METHOD__, '__METHOD__');
+        // $this->debug(__METHOD__, '__METHOD__');
         switch ($type) {
             case 'indexed':
                 $this->current_array_dimension_is_indexed = true;
@@ -737,15 +772,17 @@ class ParseYML extends AbstractAnalyzeCharacter
                 $this->current_array_dimension_is_associative = true;
                 break;
         }
-        $this->lines[$this->current_line][$this->current_array_dimension]['array_type'] = $type;
+        $this->segmen[$this->current_line][$this->current_array_dimension]['array_type'] = $type;
     }
 
     /**
      *
      */
-    public function toggleQuote($bool)
+    protected function toggleQuote()
     {
-        switch ($bool) {
+        $current = $this->is_ongoing_wrapped_by_quote;
+        $toggle = !$current;
+        switch ($toggle) {
             case true:
                 $this->is_ongoing_wrapped_by_quote = true;
                 switch ($this->current_character_string) {
@@ -775,16 +812,16 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function verifyIndent($about, $string)
     {
-        $this->debug(__METHOD__, '__METHOD__');
+        // $this->debug(__METHOD__, '__METHOD__');
         switch ($about) {
             case 'tab':
                 if (strpos($string, "\t") !== false) {
-                    throw new RuntimeException('Rule3: Indent tidak boleh mengandung tab. Line: ' . $this->current_line . ', column: ' . $this->current_column . ', string: "' . $this->current_line_string . '".');
+                    $this->error('Indent contains tab.');
                 }
                 break;
             case 'dimension':
                 if ($this->current_array_dimension === 0) {
-                    throw new RuntimeException('Rule4: Tidak boleh leading space. Line: ' . $this->current_line . ', column: ' . $this->current_column . ', string: "' . $this->current_line_string . '".');
+                    $this->error('Cannot leading space.');
                 }
                 break;
         }
@@ -795,7 +832,7 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function cleaningTrailingWhiteSpace($type)
     {
-        $this->debug(__METHOD__, '__METHOD__');        
+        // $this->debug(__METHOD__, '__METHOD__');
         $quote = $this->getCharacter('quote_' . $type);
         if (!empty($quote)) {
             return;
@@ -803,8 +840,8 @@ class ParseYML extends AbstractAnalyzeCharacter
         $current = $this->getCharacter($type);
         $test = rtrim($current);
         if ($current !== $test) {
-            $this->lines[$this->current_line][$this->current_array_dimension]['segmen'][$type . '_append'] = substr($current, strlen($test));
-            $this->lines[$this->current_line][$this->current_array_dimension]['segmen'][$type] = $test;
+            $this->segmen[$this->current_line][$this->current_array_dimension]['segmen'][$type . '_append'] = substr($current, strlen($test));
+            $this->segmen[$this->current_line][$this->current_array_dimension]['segmen'][$type] = $test;
         }
     }
 
@@ -813,7 +850,7 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function correctingCharactersMovingDimension()
     {
-        $this->debug(__METHOD__, '__METHOD__');
+        // $this->debug(__METHOD__, '__METHOD__');
         // Get.
         $quote_value = $this->getCharacter('quote_value');
         $value = $this->getCharacter('value');
@@ -842,7 +879,7 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function prevDimension($type, $indent_string)
     {
-        $this->debug(__METHOD__, '__METHOD__');
+        // $this->debug(__METHOD__, '__METHOD__');
         $current_array_dimension = $this->current_array_dimension;
         $found = false;
         while (--$current_array_dimension) {
@@ -856,7 +893,7 @@ class ParseYML extends AbstractAnalyzeCharacter
             }
         }
         if ($found === false) {
-            throw new RuntimeException('Gagal menemukan indent yang sesuai dengan yang sebelumnya. Line: ' . $this->current_line . ', column: ' . $this->current_column . ', string: "' . $this->current_line_string . '".');
+            return $this->error('Previous Indent not found.');
         }
     }
 
@@ -865,7 +902,7 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function nextDimension($type, $indent_string)
     {
-        $this->debug(__METHOD__, '__METHOD__');
+        // $this->debug(__METHOD__, '__METHOD__');
         $this->current_array_dimension++;
         $this->setCurrentArrayAs($type);
         $this->indents_temporary[$this->current_array_dimension] = [
@@ -878,7 +915,7 @@ class ParseYML extends AbstractAnalyzeCharacter
         while (isset($this->indents_temporary[++$current_array_dimension])) {
             unset($this->indents_temporary[$current_array_dimension]);
         }
-        $this->debug($this->indents_temporary, '$this->indents_temporary', 1);
+        // $this->debug($this->indents_temporary, '$this->indents_temporary', 1);
     }
 
     /**
@@ -886,18 +923,16 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function buildData()
     {
-        $lines = $this->lines;
-        $current_array_dimension = 1;
-        $indents = [];
+        $segmen = $this->segmen;
         do {
-            $line = key($lines);
-            $line_info = $lines[$line];
+            $line = key($segmen);
+            $line_info = $segmen[$line];
             do {
                 $dimension = key($line_info);
                 $array_type = isset($line_info[$dimension]['array_type']) ? $line_info[$dimension]['array_type'] : null;
                 $key = isset($line_info[$dimension]['segmen']['key']) ? $line_info[$dimension]['segmen']['key']: null;
                 $value = isset($line_info[$dimension]['segmen']['value']) ? $line_info[$dimension]['segmen']['value']: null;
-                
+
                 switch ($array_type) {
                     case 'associative':
                         $key = $this->getKey($key, $dimension);
@@ -919,8 +954,8 @@ class ParseYML extends AbstractAnalyzeCharacter
                         break;
                 }
                 if (isset($value)) {
-                    if (isset($this->lines[$line][$dimension]['segmen']['quote_value'])) {
-                        $quote = $this->lines[$line][$dimension]['segmen']['quote_value'];
+                    if (isset($this->segmen[$line][$dimension]['segmen']['quote_value'])) {
+                        $quote = $this->segmen[$line][$dimension]['segmen']['quote_value'];
                         if ($quote == '"') {
                             $value = $this->unEscapeString($value);
                         }
@@ -928,19 +963,30 @@ class ParseYML extends AbstractAnalyzeCharacter
                     else {
                         $value = $this->convertStringValue($value);
                     }
-                    if (isset($this->lines[$line][$dimension]['segmen']['quote_key'])) {
-                        $quote = $this->lines[$line][$dimension]['segmen']['quote_key'];
+                    if (isset($this->segmen[$line][$dimension]['segmen']['quote_key'])) {
+                        $quote = $this->segmen[$line][$dimension]['segmen']['quote_key'];
                         if ($quote == '"') {
                             $key = $this->unEscapeString($key);
                         }
                     }
-                    $data_expand = ArrayDimensional::expand([$key => $value]);
-                    $this->data = array_replace_recursive($this->data, $data_expand);
+                    // Untuk kasus
+                    // ```yml
+                    // # Bla-bla
+                    // cinta
+                    // ```
+                    // maka variable $key akan bernilai null.
+                    if (null === $key) {
+                        $this->data = $value;
+                    }
+                    else {
+                        $data_expand = ArrayDimensional::expand([$key => $value]);
+                        $this->data = array_replace_recursive($this->data, $data_expand);
+                    }
                 }
             }
             while (next($line_info));
         }
-        while (next($lines));
+        while (next($segmen));
     }
 
     /**
@@ -1064,9 +1110,8 @@ class ParseYML extends AbstractAnalyzeCharacter
         switch ($value) {
             case '"':
                 return '"';
-
             default:
-                throw new RuntimeException('Found unknown escape character "' . $value . '".');
+                return $this->error('Found unknown escape character: "' . $value . '".');
         }
         return $value;
     }
@@ -1074,7 +1119,7 @@ class ParseYML extends AbstractAnalyzeCharacter
     /**
      *
      */
-    public function error($msg)
+    protected function error($msg)
     {
         switch ($msg) {
             case 'Unexpected characters.':
@@ -1083,11 +1128,26 @@ class ParseYML extends AbstractAnalyzeCharacter
                 throw new RuntimeException('A colon cannot be used in an unquoted mapping value. Line: ' . $this->current_line . ', column: ' . $this->current_column . ', string: "' . $this->current_line_string . '".');
             case 'Malformat.':
                 throw new RuntimeException('Malformed inline YAML string. Line: ' . $this->current_line . ', column: ' . $this->current_column . ', string: "' . $this->current_line_string . '".');
-
-
+            case 'Unable to parse the line.':
+                throw new RuntimeException('Unable to parse the line. Line: ' . $this->current_line . ', column: ' . $this->current_column . ', string: "' . $this->current_line_string . '".');
+            case 'Currently is mapping.':
+                throw new RuntimeException('You cannot define a sequence item when in a mapping. Line: ' . $this->current_line . ', column: ' . $this->current_column . ', string: "' . $this->current_line_string . '".');
+            case 'Currently is sequence.':
+                throw new RuntimeException('You cannot define a mapping item when in a sequence. Line: ' . $this->current_line . ', column: ' . $this->current_column . ', string: "' . $this->current_line_string . '".');
+            case 'Indent contains tab.':
+                throw new RuntimeException('Indent tidak boleh mengandung tab. Line: ' . $this->current_line . ', column: ' . $this->current_column . ', string: "' . $this->current_line_string . '".');
+            case 'Cannot leading space.':
+                throw new RuntimeException('Tidak boleh leading space. Line: ' . $this->current_line . ', column: ' . $this->current_column . ', string: "' . $this->current_line_string . '".');
+            case 'Unexpected colon inside key.':
+                throw new RuntimeException('A colon cannot be used in an unquoted key. Line: ' . $this->current_line . ', column: ' . $this->current_column . ', string: "' . $this->current_line_string . '".');
+            case 'Malformat colon.':
+                throw new RuntimeException('Karakter sesudah colon harus whitespace. Line: ' . $this->current_line . ', column: ' . $this->current_column . ', string: "' . $this->current_line_string . '".');
+            case 'Previous Indent not found.':
+                throw new RuntimeException('Gagal menemukan indent yang sesuai dengan yang sebelumnya. Line: ' . $this->current_line . ', column: ' . $this->current_column . ', string: "' . $this->current_line_string . '".');
             default:
+                // 'Found unknown escape character: "' . $value . '".'
                 throw new RuntimeException($msg);
-                
+
         }
     }
 
