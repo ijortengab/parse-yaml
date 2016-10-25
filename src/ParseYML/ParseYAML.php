@@ -1,6 +1,6 @@
 <?php
 
-namespace IjorTengab\ParseYML;
+namespace IjorTengab\ParseYAML;
 
 use IjorTengab\Tools\Abstracts\AbstractAnalyzeCharacter;
 use IjorTengab\Tools\Functions\CamelCase;
@@ -9,7 +9,7 @@ use IjorTengab\Tools\Functions\ArrayDimensional;
 /**
  *
  */
-class ParseYML extends AbstractAnalyzeCharacter
+class ParseYAML extends AbstractAnalyzeCharacter
 {
     /**
      * Informasi step saat ini yang digunakan untuk menganalisis karakter saat

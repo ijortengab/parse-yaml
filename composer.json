@@ -1,6 +1,6 @@
 {
-    "name": "ijortengab/parse-yml",
-    "description": "Parser for YML file format.",
+    "name": "ijortengab/parse-yaml",
+    "description": "Parser for YAML format.",
     "type": "library",
     "license": "GPL",
     "authors": [

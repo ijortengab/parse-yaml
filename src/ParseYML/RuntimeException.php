@@ -1,6 +1,6 @@
 <?php
 
-namespace IjorTengab\ParseYML;
+namespace IjorTengab\ParseYAML;
 
 class RuntimeException extends \RuntimeException
 {
