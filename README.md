@@ -1,31 +1,29 @@
 Parse YML
 ==================
 
-ParseYML adalah library PHP untuk mempersing [YAML File Format][1]. File dot YML
-adalah [salah satu file][2] yang digunakan untuk menyimpan configuration.
-Library ini di-design untuk terintegrasi dengan Class [Configuration Editor][3].
-Untuk kebutuhan unparse/dump array kedalam format dot yml, Anda dapat
-menggunakan Class Configuration Editor.
+ParseYML adalah library PHP untuk mempersing string berformat YML menjadi
+variable. Library ini di-design untuk terintegrasi dengan Library
+[Configuration Editor][1]. Untuk kebutuhan parse dan unparse sekaligus, maka
+sebaiknya gunakan Library [Configuration Editor][1]. Namun jika hanya untuk
+parsing, maka library ini sudah cukup memenuhi kebutuhan tersebut.
 
-[1]: https://en.wikipedia.org/wiki/YAML
-[2]: https://en.wikipedia.org/wiki/Configuration_file
-[3]: https://github.com/ijortengab/configuration-editor
+[1]: https://github.com/ijortengab/configuration-editor
 
 ## Requirements
-
  - PHP > 5.4
- - ```composer require psr/log```
 
 ## Comparison
 
 Library PHP untuk parsing format YAML yang sudah exists adalah [syck], [spyc],
-dan [symfony/yaml][4]. Perbedaan secara konsep dengan library lainnya ialah
-perlakuan terhadap *comments* yang terdapat pada file YML. ParseYML jika digunakan bersama dengan
-[ConfigurationEditor][3] akan menjaga *comments* tetap exists.
+dan [symfony/yaml][symfony]. Tujuan utama dibuat library ini adalah untuk
+mempertahankan *comment* yang terdapat pada informasi di format YML agar tetap
+exists saat dilakukan dump/unparse. Keunggulan ini-lah yang membedakan dengan
+library parse YML yang lain. Untuk mendapatkan fitur ini, gunakan library
+[Configuration Editor][1].
 
 [syck]: http://pecl.php.net/package/syck
 [spyc]: https://github.com/mustangostang/spyc
-[4]: http://symfony.com/doc/current/components/yaml/introduction.html
+[symfony]: http://symfony.com/doc/current/components/yaml/introduction.html
 
 ## Repository
 

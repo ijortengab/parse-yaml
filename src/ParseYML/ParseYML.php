@@ -11,17 +11,64 @@ use IjorTengab\Tools\Functions\ArrayDimensional;
  */
 class ParseYML extends AbstractAnalyzeCharacter
 {
+    /**
+     * Informasi step saat ini yang digunakan untuk menganalisis karakter saat
+     * ini. Property ini akan menjadi acuan untuk method yang digunakan.
+     * Contoh jika nilai property ini adalah 'init', maka method yang digunakan
+     * adalah 'analyzeStepInit()', jika nilai property ini adalah 'build_value',
+     * maka method yang digunakan adalah 'analyzeStepBuildValue()'.
+     */
     protected $current_step = 'init';
+
+    /**
+     * Informasi untuk step berikutnya. Nilai ini diubah oleh method-method
+     * dengan prefix 'analyzeStep'. Nilai dari property ini akan mengisi
+     * property $current_step ketika akan menganalisis karakter berikutnya.
+     */
     protected $next_step;
+
+    /**
+     * Informasi bahwa property parent::$raw telah dilakukan parsing.
+     */
     protected $has_parsed = false;
+
+    /**
+     * Hasil dari parsing.
+     */
     protected $data;
+
+    /**
+     * Menyimpan segmentasi informasi yang ada pada property parent::$raw.
+     */
     protected $segmen = [];
+
+    /**
+     * Mapping antara key data dengan line pada file.
+     * Array sederhana satu dimensi, dimana key merupakan array simplify
+     * dan value merupakan baris pada file.
+     * Contoh:
+     * [
+     *   "key[child][0]" => 1,
+     *   "key[child][1]" => 2,
+     *   "key[child][2]" => 3,
+     *   "other-key" => 4,
+     * ]
+     */
     protected $keys = [];
-    protected $keys_temporary = [];
-    protected $indents_temporary = [];
+
+    /**
+     * Penampungan key yang bersifat sequence, untuk nantinya dihitung
+     * index autoincrement saat dilakukan parsing.
+     * Contoh:
+     * [
+     *   "key[child][]",
+     *   "key[child][]",
+     *   "key[child][]",
+     * ]
+     * Pada array diatas, maka key[child][2] adalah index trtinggi.
+     */
     protected $sequence_of_scalar = [];
-    protected $is_ongoing_wrapped_by_quote = false;
-    protected $quote_wrapper;
+
     /**
      * Kondisi dimensi saat ini.
      */
@@ -29,16 +76,25 @@ class ParseYML extends AbstractAnalyzeCharacter
     protected $current_array_dimension_is_indexed = false;
     protected $current_array_dimension_is_associative = false;
     protected $current_line_populate_segmen = 1;
+
     /**
      * Kondisi character saat ini.
      */
     protected $is_alphanumeric = false;
     protected $is_space = false; // All whitespace except \r \n.
     protected $is_quote = false;
-    protected $is_single_quote = false;
-    protected $is_double_quote = false;
+    protected $is_quote_single = false;
+    protected $is_quote_double = false;
     protected $is_separator = false;
     protected $is_commentsign = false;
+
+    /**
+     * Property Sementara.
+     */
+    protected $keys_temporary = [];
+    protected $indents_temporary = [];
+    protected $is_ongoing_wrapped_by_quote = false;
+    protected $quote_wrapper;
 
     /**
      * Melakukan parsing.
@@ -52,7 +108,7 @@ class ParseYML extends AbstractAnalyzeCharacter
     }
 
     /**
-     *
+     * Mengembalikan nilai dari property $data.
      */
     public function getResult()
     {
@@ -62,13 +118,63 @@ class ParseYML extends AbstractAnalyzeCharacter
     /**
      *
      */
+    protected function beforeLooping()
+    {
+    }
+
+    /**
+     *
+     */
+    protected function afterLooping()
+    {
+        $this->buildData();
+    }
+
+    /**
+     *
+     */
+    protected function beforeAnalyze()
+    {
+    }
+
+    /**
+     *
+     */
+    protected function afterAnalyze()
+    {
+        if ($this->is_last) {
+            switch ($this->current_step) {
+                case 'build_key':
+                    if ($this->is_ongoing_wrapped_by_quote) {
+                        $this->error('Malformat.');
+                    }
+                    else {
+                        $this->cleaningTrailingWhiteSpace('key');
+                    }
+                    break;
+
+                case 'build_value':
+                    // Contoh, ada tiga spasi di akhir:
+                    // ```
+                    // aku: sayang[\r][\n]
+                    // kamu: cinta[space][space][space]
+                    // ```
+                    if ($this->is_ongoing_wrapped_by_quote) {
+                        $this->error('Malformat.');
+                    }
+                    else {
+                        $this->cleaningTrailingWhiteSpace('value');
+                    }
+                    break;
+            }
+        }
+    }
+
+    /**
+     * Implements abstact analyzeCurrentLine().
+     */
     protected function analyzeCurrentLine()
     {
-        // $this->debug(__METHOD__, '__METHOD__');
-        // $this->debug($this->current_array_dimension, '$this->current_array_dimension', 1);
-        // $this->debug($this->current_array_dimension_is_indexed, '$this->current_array_dimension_is_indexed', 1);
-        // $this->debug($this->current_array_dimension_is_associative, '$this->current_array_dimension_is_associative', 1);
-        // $this->debug($this->indents_temporary, '$this->indents_temporary', 1);
         if ($this->current_step !== 'init') {
             return;
         }
@@ -84,17 +190,14 @@ class ParseYML extends AbstractAnalyzeCharacter
         }
         // Jika isinya cuma comment.
         if (preg_match('/^(?<leading_space>[\s]*)(?<comment>#.*)/', $current_line_string, $match)) {
-            // $this->debug($match, '$match', 2);
             return $this->analyzeLineComment($match);
         }
         // Jika line merupakan sequence of scalar (array indexed).
         if (preg_match('/^(?<leading_space>[\s]*)(?<sequence_sign>-[\s])(?<other>.*)/', $current_line_string, $match)) {
-            // $this->debug($match, '$match', 2);
             return $this->analyzeLineSequenceOfScalar($match);
         }
         // Jika line merupakan mapping of scalar (array associative).
         if (preg_match('/^(?<leading_space>[\s]*)(?<key>[^\s].*):/', $current_line_string, $match)) {
-            // $this->debug($match, '$match', 2);
             return $this->analyzeLineMappingOfScalar($match);
         }
         // Untuk kasus
@@ -111,7 +214,7 @@ class ParseYML extends AbstractAnalyzeCharacter
     }
 
     /**
-     *
+     * Menganalisis line yang dikenali sebagai comment.
      */
     protected function analyzeLineComment($match)
     {
@@ -128,7 +231,8 @@ class ParseYML extends AbstractAnalyzeCharacter
     }
 
     /**
-     *
+     * Menganalisis line yang dikenali sebagai sequence of scalar
+     * (indexed array).
      */
     protected function analyzeLineSequenceOfScalar($match)
     {
@@ -206,65 +310,8 @@ class ParseYML extends AbstractAnalyzeCharacter
     }
 
     /**
-     *
-     */
-    protected function beforeLooping()
-    {
-        // $this->debug(__METHOD__, '__METHOD__');
-    }
-
-    /**
-     *
-     */
-    protected function afterLooping()
-    {
-        // $this->debug(__METHOD__, '__METHOD__');
-        // $this->debug($this->segmen, '$this->segmen');
-        $this->buildData();
-    }
-
-    /**
-     *
-     */
-    protected function beforeAnalyze()
-    {
-    }
-
-    /**
-     *
-     */
-    protected function afterAnalyze()
-    {
-        if ($this->is_last) {
-            switch ($this->current_step) {
-                case 'build_key':
-                    if ($this->is_ongoing_wrapped_by_quote) {
-                        $this->error('Malformat.');
-                    }
-                    else {
-                        $this->cleaningTrailingWhiteSpace('key');
-                    }
-                    break;
-
-                case 'build_value':
-                    // Contoh, ada tiga spasi di akhir:
-                    // ```
-                    // aku: sayang[\r][\n]
-                    // kamu: cinta[space][space][space]
-                    // ```
-                    if ($this->is_ongoing_wrapped_by_quote) {
-                        $this->error('Malformat.');
-                    }
-                    else {
-                        $this->cleaningTrailingWhiteSpace('value');
-                    }
-                    break;
-            }
-        }
-    }
-
-    /**
-     *
+     * Menganalisis line yang dikenali sebagai mapping of scalar
+     * (associative array).
      */
     protected function analyzeLineMappingOfScalar($match)
     {
@@ -319,7 +366,7 @@ class ParseYML extends AbstractAnalyzeCharacter
     protected function manipulateCurrentCharacter()
     {
         parent::manipulateCurrentCharacter();
-        // $this->debug(__METHOD__, '__METHOD__');
+
         $ch = $this->current_character_string;
         $nch = $this->next_character_string;
         // Mendefinisikan character quote yang di-escape agar tidak bentrok
@@ -342,10 +389,6 @@ class ParseYML extends AbstractAnalyzeCharacter
                 $this->current_character++;
             }
         }
-        // Debug.
-        // $this->debug($this->current_character_string, '$this->current_character_string', 1);
-        // $this->debug($this->next_character_string, '$this->next_character_string', 1);
-        // $this->debug($this->prev_character_string, '$this->prev_character_string', 1);
     }
 
     /**
@@ -354,7 +397,6 @@ class ParseYML extends AbstractAnalyzeCharacter
     protected function assignCurrentCharacter()
     {
         parent::assignCurrentCharacter();
-        // $this->debug(__METHOD__, '__METHOD__');
         $ch = $this->current_character_string;
         if (ctype_alnum($ch)) {
             $this->is_alphanumeric = true;
@@ -364,11 +406,11 @@ class ParseYML extends AbstractAnalyzeCharacter
         }
         elseif ($ch === '"') {
             $this->is_quote = true;
-            $this->is_double_quote = true;
+            $this->is_quote_double = true;
         }
         elseif ($ch === "'") {
             $this->is_quote = true;
-            $this->is_single_quote = true;
+            $this->is_quote_single = true;
         }
         elseif ($ch === ':') {
             $this->is_separator = true;
@@ -379,18 +421,10 @@ class ParseYML extends AbstractAnalyzeCharacter
     }
 
     /**
-     *
+     * Implements of abstract analyzeCurrentCharacter().
      */
     protected function analyzeCurrentCharacter()
     {
-        // $this->debug(__METHOD__, '__METHOD__');
-        // $this->debug($this->is_last, '$this->is_last', 1);
-        // $this->debug($this->is_alphanumeric, '$this->is_alphanumeric', 1);
-        // $this->debug($this->is_break, '$this->is_break', 1);
-        // $this->debug($this->is_space, '$this->is_space', 1);
-        // $this->debug($this->is_quote, '$this->is_quote', 1);
-        // $this->debug($this->is_separator, '$this->is_separator', 1);
-        // $this->debug($this->is_commentsign, '$this->is_commentsign', 1);
         $this->runStep();
     }
 
@@ -400,10 +434,7 @@ class ParseYML extends AbstractAnalyzeCharacter
     protected function prepareNextLoop()
     {
         parent::prepareNextLoop();
-        // $this->debug(__METHOD__, '__METHOD__');
-        // $this->debug($this->next_step, '$this->next_step');
         if ($this->next_step !== null) {
-            // $this->debug($this->next_step, '$this->next_step', 1);
             $this->current_step = $this->next_step;
             $this->next_step = null;
         }
@@ -422,19 +453,17 @@ class ParseYML extends AbstractAnalyzeCharacter
         $this->is_alphanumeric = false;
         $this->is_space = false;
         $this->is_quote = false;
-        $this->is_single_quote = false;
-        $this->is_double_quote = false;
+        $this->is_quote_single = false;
+        $this->is_quote_double = false;
         $this->is_separator = false;
         $this->is_commentsign = false;
     }
 
     /**
-     *
+     * Build method.
      */
     protected function runStep()
     {
-        // $this->debug(__METHOD__, '__METHOD__');
-        // $this->debug($this->current_step, '$this->current_step', 1);
         static $cache;
         if (isset($cache[$this->current_step])) {
             return $this->{$cache[$this->current_step]}();
@@ -446,14 +475,10 @@ class ParseYML extends AbstractAnalyzeCharacter
     }
 
     /**
-     * Copy dari IjorTengab\Tools\Functions\CamelCase::convertFromUnderScore()
-     * untuk menghindari require ijortengab/tools.
+     *
      */
     protected function setCharacter($key, $value)
     {
-        // $this->debug(__METHOD__, '__METHOD__');
-        // $this->debug($key, '$key', 1);
-        // $this->debug($value, '$value', 1);
         if (!isset($this->segmen[$this->current_line_populate_segmen][$this->current_array_dimension]['segmen'][$key])) {
             $this->segmen[$this->current_line_populate_segmen][$this->current_array_dimension]['segmen'][$key] = '';
         }
@@ -465,7 +490,6 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function setCurrentCharacterAs($key)
     {
-        // $this->debug(__METHOD__, '__METHOD__');
         return $this->setCharacter($key, $this->current_character_string);
     }
 
@@ -474,8 +498,6 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function getCharacter($key)
     {
-        // $this->debug(__METHOD__, '__METHOD__');
-        // $this->debug($key, '$key', 1);
         if (isset($this->segmen[$this->current_line_populate_segmen][$this->current_array_dimension]['segmen'][$key])) {
             return $this->segmen[$this->current_line_populate_segmen][$this->current_array_dimension]['segmen'][$key];
         }
@@ -486,8 +508,6 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function delCharacter($key)
     {
-        // $this->debug(__METHOD__, '__METHOD__');
-        // $this->debug($key, '$key', 1);
         unset($this->segmen[$this->current_line_populate_segmen][$this->current_array_dimension]['segmen'][$key]);
     }
 
@@ -496,7 +516,6 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function analyzeStepInit()
     {
-        // $this->debug(__METHOD__, '__METHOD__');
         if ($this->is_alphanumeric) {
             $this->setCurrentCharacterAs('value');
             $this->next_step = 'build_value';
@@ -519,7 +538,6 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function analyzeStepBuildKeyPrepend()
     {
-        // $this->debug(__METHOD__, '__METHOD__');
         if ($this->is_alphanumeric) {
             $this->setCurrentCharacterAs('key');
             $this->next_step = 'build_key';
@@ -539,7 +557,6 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function analyzeStepBuildKey()
     {
-        // $this->debug(__METHOD__, '__METHOD__');
         $default = false;
         if ($this->is_alphanumeric) {
             $default = true;
@@ -582,7 +599,6 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function analyzeStepBuildKeyAppend()
     {
-        // $this->debug(__METHOD__, '__METHOD__');
         if ($this->is_separator) {
             // Rule1: Karakter sesudah separator harus whitespace.
             if (!ctype_space($this->next_character_string)) {
@@ -604,7 +620,6 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function analyzeStepBuildValuePrepend()
     {
-        // $this->debug(__METHOD__, '__METHOD__');
         if ($this->is_space) {
             $this->setCurrentCharacterAs('value_prepend');
         }
@@ -635,7 +650,6 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function analyzeStepBuildValue()
     {
-        // $this->debug(__METHOD__, '__METHOD__');
         $default = false;
         if ($this->is_alphanumeric) {
             $default = true;
@@ -662,7 +676,6 @@ class ParseYML extends AbstractAnalyzeCharacter
         }
         elseif ($this->is_quote && $this->is_ongoing_wrapped_by_quote) {
             $quote = $this->quote_wrapper;
-            // $this->debug($quote, '$quote', 1);
             if ($quote === $this->current_character_string) {
                 // Pada kasus sepert ini:
                 // ```
@@ -714,7 +727,6 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function analyzeStepBuildValueAppend()
     {
-        // $this->debug(__METHOD__, '__METHOD__');
         if ($this->is_break) {
             $this->setCurrentCharacterAs('eol');
             $this->next_step = 'init';
@@ -746,7 +758,6 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function analyzeStepBuildComment()
     {
-        // $this->debug(__METHOD__, '__METHOD__');
         $default = false;
         if ($this->is_break) {
             $this->setCurrentCharacterAs('eol');
@@ -765,7 +776,6 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function setCurrentArrayAs($type)
     {
-        // $this->debug(__METHOD__, '__METHOD__');
         switch ($type) {
             case 'indexed':
                 $this->current_array_dimension_is_indexed = true;
@@ -804,7 +814,6 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function verifyIndent($about, $string)
     {
-        // $this->debug(__METHOD__, '__METHOD__');
         switch ($about) {
             case 'tab':
                 if (strpos($string, "\t") !== false) {
@@ -824,7 +833,6 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function cleaningTrailingWhiteSpace($type)
     {
-        // $this->debug(__METHOD__, '__METHOD__');
         $quote = $this->getCharacter('quote_' . $type);
         if (!empty($quote)) {
             return;
@@ -842,7 +850,6 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function correctingCharactersMovingDimension()
     {
-        // $this->debug(__METHOD__, '__METHOD__');
         // Get.
         $quote_value = $this->getCharacter('quote_value');
         $value = $this->getCharacter('value');
@@ -871,7 +878,6 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function prevDimension($type, $indent_string)
     {
-        // $this->debug(__METHOD__, '__METHOD__');
         $current_array_dimension = $this->current_array_dimension;
         $found = false;
         while (--$current_array_dimension) {
@@ -894,7 +900,6 @@ class ParseYML extends AbstractAnalyzeCharacter
      */
     protected function nextDimension($type, $indent_string)
     {
-        // $this->debug(__METHOD__, '__METHOD__');
         $this->current_array_dimension++;
         $this->setCurrentArrayAs($type);
         $this->indents_temporary[$this->current_array_dimension] = [
@@ -907,7 +912,6 @@ class ParseYML extends AbstractAnalyzeCharacter
         while (isset($this->indents_temporary[++$current_array_dimension])) {
             unset($this->indents_temporary[$current_array_dimension]);
         }
-        // $this->debug($this->indents_temporary, '$this->indents_temporary', 1);
     }
 
     /**
@@ -949,7 +953,7 @@ class ParseYML extends AbstractAnalyzeCharacter
                     if (isset($this->segmen[$line][$dimension]['segmen']['quote_value'])) {
                         $quote = $this->segmen[$line][$dimension]['segmen']['quote_value'];
                         if ($quote == '"') {
-                            $value = $this->unEscapeString($value);
+                            $value = $this->unescapeString($value);
                         }
                     }
                     else {
@@ -958,7 +962,7 @@ class ParseYML extends AbstractAnalyzeCharacter
                     if (isset($this->segmen[$line][$dimension]['segmen']['quote_key'])) {
                         $quote = $this->segmen[$line][$dimension]['segmen']['quote_key'];
                         if ($quote == '"') {
-                            $key = $this->unEscapeString($key);
+                            $key = $this->unescapeString($key);
                         }
                     }
                     // Untuk kasus
@@ -1079,13 +1083,13 @@ class ParseYML extends AbstractAnalyzeCharacter
     /**
      *
      */
-    protected function unEscapeString($value)
+    protected function unescapeString($value)
     {
         $find = '\\';
         $x = strpos($value, $find);
         while ($x !== false) {
             $y = $value[$x + 1];
-            $y = $this->unEscapeChar($y);
+            $y = $this->unescapeCharacter($y);
             $before = substr($value, 0, $x);
             $after = substr($value, $x + 2);
             $value = $before . $y . $after;
@@ -1095,17 +1099,61 @@ class ParseYML extends AbstractAnalyzeCharacter
     }
 
     /**
-     *
+     * Sumber symfony/yaml Unescaper.php
      */
-    protected function unEscapeChar($value)
+    protected function unescapeCharacter($value)
     {
         switch ($value) {
+            case '0':
+                return "\x0";
+            case 'a':
+                return "\x7";
+            case 'b':
+                return "\x8";
+            case 't':
+                return "\t";
+            case "\t":
+                return "\t";
+            case 'n':
+                return "\n";
+            case 'v':
+                return "\xB";
+            case 'f':
+                return "\xC";
+            case 'r':
+                return "\r";
+            case 'e':
+                return "\x1B";
+            case ' ':
+                return ' ';
             case '"':
                 return '"';
+            case '/':
+                return '/';
+            case '\\':
+                return '\\';
+            case 'N':
+                // U+0085 NEXT LINE
+                return "\xC2\x85";
+            case '_':
+                // U+00A0 NO-BREAK SPACE
+                return "\xC2\xA0";
+            case 'L':
+                // U+2028 LINE SEPARATOR
+                return "\xE2\x80\xA8";
+            case 'P':
+                // U+2029 PARAGRAPH SEPARATOR
+                return "\xE2\x80\xA9";
+                // Todo, resolve below.
+            // case 'x':
+                // return self::utf8chr(hexdec(substr($value, 2, 2)));
+            // case 'u':
+                // return self::utf8chr(hexdec(substr($value, 2, 4)));
+            // case 'U':
+                // return self::utf8chr(hexdec(substr($value, 2, 8)));
             default:
                 return $this->error('Found unknown escape character: "' . $value . '".');
         }
-        return $value;
     }
 
     /**
@@ -1142,5 +1190,5 @@ class ParseYML extends AbstractAnalyzeCharacter
 
         }
     }
-
+//
 }
