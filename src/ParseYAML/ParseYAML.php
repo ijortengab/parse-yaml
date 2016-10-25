@@ -383,7 +383,7 @@ class ParseYAML extends AbstractAnalyzeCharacter
                 }
                 $x = $this->current_character;
                 $ch = '\\' . $nch;
-                $nch = isset($this->raw[$x+1]) ? $this->raw[$x+2] : false;
+                $nch = isset($this->raw[$x+2]) ? $this->raw[$x+2] : false;
                 $this->current_character_string = $ch;
                 $this->next_character_string = $nch;
                 $this->current_character++;
