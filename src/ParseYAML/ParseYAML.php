@@ -1029,15 +1029,21 @@ class ParseYAML extends AbstractAnalyzeCharacter
                 }
             }
         }
-        $count = array_count_values($this->sequence_of_scalar);
-        $c = isset($count[$key]) ? $count[$key] : 0;
-        if ($dimension === 1) {
-            $_key = $c;
+
+        if (array_key_exists($key, $this->sequence_of_scalar)) {
+            $count = $this->sequence_of_scalar[$key];
         }
         else {
-            $_key = $this->keys_temporary[$_dimension] . '[' . $c . ']';
+            $count = $this->sequence_of_scalar[$key] = 0;
         }
-        $this->sequence_of_scalar[] = $key;
+
+        if ($dimension === 1) {
+            $_key = $count;
+        }
+        else {
+            $_key = $this->keys_temporary[$_dimension] . '[' . $count . ']';
+        }
+        $this->sequence_of_scalar[$key] += 1;
         $this->keys_temporary[$dimension] = $_key;
         // Hapus yang lama.
         $_dimension = $dimension;
