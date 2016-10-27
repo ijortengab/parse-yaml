@@ -4,7 +4,7 @@ namespace IjorTengab\ParseYAML;
 
 use IjorTengab\Tools\Abstracts\AbstractAnalyzeCharacter;
 use IjorTengab\Tools\Functions\CamelCase;
-use IjorTengab\Tools\Functions\ArrayDimensional;
+use IjorTengab\Tools\Functions\ArrayHelper;
 
 /**
  *
@@ -975,7 +975,7 @@ class ParseYAML extends AbstractAnalyzeCharacter
                         $this->data = $value;
                     }
                     else {
-                        $data_expand = ArrayDimensional::expand([$key => $value]);
+                        $data_expand = ArrayHelper::dimensionalExpand([$key => $value]);
                         $this->data = array_replace_recursive((array) $this->data, $data_expand);
                     }
                 }
