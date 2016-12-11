@@ -115,12 +115,6 @@ class ParseYAML extends AbstractAnalyzeCharacter
         return $this->data;
     }
 
-    /**
-     *
-     */
-    protected function beforeLooping()
-    {
-    }
 
     /**
      *
@@ -133,14 +127,7 @@ class ParseYAML extends AbstractAnalyzeCharacter
     /**
      *
      */
-    protected function beforeAnalyze()
-    {
-    }
-
-    /**
-     *
-     */
-    protected function afterAnalyze()
+    protected function afterAnalyzeCurrentCharacter()
     {
         if ($this->is_last) {
             switch ($this->current_step) {
@@ -907,6 +894,8 @@ class ParseYAML extends AbstractAnalyzeCharacter
             'length' => strlen($indent_string),
             'array_type' => $type,
         ];
+        // Update 2016-12-11,
+        $this->segmen[$this->current_line][$this->current_array_dimension]['indent_string'] = $indent_string;
         // Hapus indent yang lama.
         $current_array_dimension = $this->current_array_dimension;
         while (isset($this->indents_temporary[++$current_array_dimension])) {
